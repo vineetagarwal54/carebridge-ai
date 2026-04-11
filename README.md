@@ -1,294 +1,138 @@
-# CareBridge AI - Backend
+# CareBridge AI
 
-Care transition backend for elderly discharge patients. A nurse or facility user uploads discharge documents, the system extracts and organizes patient case information using AI, the nurse reviews and edits the extracted details, and then the case moves forward in the workflow.
+CareBridge AI is a care-transition workspace for elderly discharge patients. The backend ingests discharge documents, extracts structured case data, runs validation checks, and supports nurse review plus care-plan generation. The repository also includes a facility-facing React app and a patient-facing React app.
 
-**Tech stack:** Python 3.11+, FastAPI, SQLAlchemy, PostgreSQL, Alembic, Docker
+## Stack
 
----
+- Backend: FastAPI, SQLAlchemy, Alembic, PostgreSQL, Python 3.11+
+- Facility frontend: Vite, React, React Router
+- Patient frontend: React, Create React App, Gemini API
+- Local infra: Docker and Docker Compose
 
 ## Prerequisites
 
-Make sure you have these installed before starting:
+Install these before you start:
 
-- **Python 3.11+** - [Download](https://www.python.org/downloads/)
-- **Docker Desktop** - [Download](https://www.docker.com/products/docker-desktop/) (used for PostgreSQL and pgAdmin)
-- **Git** - [Download](https://git-scm.com/downloads)
+- Python 3.11+
+- Node.js 20+ and npm
+- Docker Desktop
+- Git
 
----
+## Environment files
 
-## Setup (step by step)
+This repo uses example env files so secrets stay out of git.
 
-### 1. Clone the repo
+- Root backend config: copy [.env.example](.env.example) to [.env](.env)
+- Facility frontend config: copy [frontend/carebridge-facility/.env.example](frontend/carebridge-facility/.env.example) to [frontend/carebridge-facility/.env](frontend/carebridge-facility/.env)
+- Patient frontend config: copy [frontend/carebridge-patient/.env.example](frontend/carebridge-patient/.env.example) to [frontend/carebridge-patient/.env](frontend/carebridge-patient/.env)
 
-```bash
-git clone <your-repo-url>
-cd carebridge-ai
-```
+The `.env` files are ignored by git, so each developer needs local copies.
 
-### 2. Create a virtual environment
+## Quick Start
 
-```bash
-python -m venv .venv
-```
-
-Activate it:
-
-- **Windows (PowerShell):**
-  ```powershell
-  .venv\Scripts\Activate.ps1
-  ```
-- **Windows (CMD):**
-  ```cmd
-  .venv\Scripts\activate.bat
-  ```
-- **macOS / Linux:**
-  ```bash
-  source .venv/bin/activate
-  ```
-
-You should see `(.venv)` at the beginning of your terminal prompt.
-
-### 3. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Set up environment variables
-
-Copy the example env file and adjust if needed:
+The fastest way to run the whole stack is Docker Compose:
 
 ```bash
 cp .env.example .env
+docker compose up --build
 ```
 
-The defaults work out of the box for local development. Open `.env` and change `PGADMIN_DEFAULT_EMAIL` to your email if you want to use pgAdmin.
+That starts:
 
-> **Important:** `.env` is in `.gitignore` and will not be committed. Every team member must create their own.
+- PostgreSQL at `localhost:5432`
+- pgAdmin at `http://localhost:5050`
+- Backend API at `http://localhost:8000`
+- Facility frontend at `http://localhost:3000`
 
-### 5. Start PostgreSQL and pgAdmin
+The API docs are available at `http://localhost:8000/docs`.
 
-Make sure Docker Desktop is running, then:
+## Local Backend Setup
 
-```bash
-docker compose up -d
-```
-
-This starts two containers:
-
-| Service   | Container           | Port  |
-|-----------|---------------------|-------|
-| PostgreSQL| `carebridge_db`     | 5432  |
-| pgAdmin   | `carebridge_pgadmin`| 5050  |
-
-Verify they are running:
+If you want to run the backend without Docker:
 
 ```bash
-docker compose ps
-```
-
-You should see both containers with status `Up`.
-
-### 6. Run database migrations
-
-```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+docker compose up -d db pgadmin
 alembic upgrade head
-```
-
-This creates the `patient_cases` and `documents` tables in PostgreSQL.
-
-### 7. Start the development server
-
-```bash
 uvicorn app.main:app --reload
 ```
 
-The API is now running at **http://localhost:8000**.
+Notes:
 
-Open **http://localhost:8000/docs** in your browser to see the interactive Swagger UI.
+- Use `postgresql+psycopg2://...` in `DATABASE_URL` when running locally with the dependencies in this repo.
+- `app/core/config.py` reads the root `.env` file.
+- `gemini_api_key` is required for the extraction service to run without errors.
 
----
+## Local Facility Frontend
 
-## Testing the API
-
-Below are curl commands to walk through the full workflow. You can also use the Swagger UI at `/docs` to run these interactively.
-
-### Health check
+The facility app reads its API URL from `VITE_API_URL` and defaults to `http://localhost:8000`.
 
 ```bash
-curl http://localhost:8000/health
+cd frontend/carebridge-facility
+npm install
+cp .env.example .env
+npm run dev
 ```
 
-Expected: `{"status":"ok"}`
+Vite serves the app at `http://localhost:5173` by default, and the backend CORS config already allows that origin.
 
-### Step 1 - Create a patient case
+## Local Patient Frontend
+
+The patient portal uses a Google Gemini key at build/runtime depending on how you run it.
 
 ```bash
-curl -X POST http://localhost:8000/cases \
-  -H "Content-Type: application/json" \
-  -d '{
-    "patient_name": "John Smith",
-    "age": 78,
-    "source_hospital": "City General Hospital",
-    "discharge_date": "2026-04-10"
-  }'
+cd frontend/carebridge-patient
+npm install
+cp .env.example .env
+npm start
 ```
 
-Note the `id` in the response (e.g. `1`). Use it in the following steps.
+If you build the patient app with Docker, pass `REACT_APP_GEMINI_API_KEY` as a build argument.
 
-### Step 2 - Upload a discharge document
+## Backend API
 
-```bash
-curl -X POST http://localhost:8000/cases/1/documents \
-  -F "file=@/path/to/your/discharge.pdf"
-```
+Useful endpoints while testing locally:
 
-Replace `/path/to/your/discharge.pdf` with an actual PDF file path. Any PDF works for now since extraction is still stubbed.
+- `GET /health`
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /cases`
+- `POST /cases/{case_id}/documents`
+- `POST /cases/{case_id}/extract`
+- `GET /cases/{case_id}/review`
+- `PATCH /cases/{case_id}/review`
+- `POST /cases/{case_id}/approve`
+- `POST /cases/{case_id}/care-plan/generate`
+- `GET /cases/{case_id}/care-plan`
 
-### Step 3 - Run extraction pipeline
+## Project Structure
 
-```bash
-curl -X POST http://localhost:8000/cases/1/extract
-```
-
-This runs the Gemini extraction (currently returns stub data), agent checks, and validation scoring. The case status changes to `extracted`.
-
-### Step 4 - Get the nurse review payload
-
-```bash
-curl http://localhost:8000/cases/1/review
-```
-
-Returns the extraction data with field-level confidence scores and review statuses. The case status changes to `in_review`.
-
-### Step 5 - Nurse edits the review (optional)
-
-```bash
-curl -X PATCH http://localhost:8000/cases/1/review \
-  -H "Content-Type: application/json" \
-  -d '{
-    "allergies": ["Penicillin", "Sulfa drugs", "Latex"],
-    "nurse_notes": "Confirmed allergies with patient family"
-  }'
-```
-
-### Step 6 - Approve the case
-
-```bash
-curl -X POST http://localhost:8000/cases/1/approve
-```
-
-> Note: This will return a 400 error if there are unresolved issues. The stub extraction data has a follow-up with low confidence that causes a block. This is expected behavior -- in production, the nurse would resolve those issues in step 5 first.
-
-### Step 7 - Generate care plan
-
-```bash
-curl -X POST http://localhost:8000/cases/1/care-plan/generate
-```
-
-> Only works after the case is approved (status = `approved`).
-
-### Step 8 - Get the care plan
-
-```bash
-curl http://localhost:8000/cases/1/care-plan
-```
-
-### Other useful endpoints
-
-```bash
-# List all cases
-curl http://localhost:8000/cases
-
-# Get a single case
-curl http://localhost:8000/cases/1
-
-# Update case fields
-curl -X PATCH http://localhost:8000/cases/1 \
-  -H "Content-Type: application/json" \
-  -d '{"source_hospital": "New Hospital Name"}'
-```
-
----
-
-## Accessing pgAdmin (optional)
-
-1. Go to **http://localhost:5050**
-2. Log in with the email and password from your `.env` file
-3. Add a new server with these connection details:
-   - **Host:** `db` (the Docker service name, not `localhost`)
-   - **Port:** `5432`
-   - **Username:** `carebridge_user`
-   - **Password:** `carebridge_pass`
-   - **Database:** `carebridge_db`
-
----
-
-## Project structure
-
-```
+```text
 carebridge-ai/
 ├── app/
-│   ├── main.py                  # FastAPI app and router setup
-│   ├── core/
-│   │   └── config.py            # Pydantic settings (reads .env)
-│   ├── db/
-│   │   ├── database.py          # SQLAlchemy engine, session, Base
-│   │   └── models/
-│   │       ├── patient_case.py  # PatientCase ORM model
-│   │       └── document.py      # Document ORM model
-│   ├── routes/
-│   │   ├── cases.py             # CRUD for patient cases
-│   │   ├── documents.py         # File upload
-│   │   ├── extraction.py        # AI extraction pipeline
-│   │   ├── review.py            # Nurse review workflow
-│   │   └── care_plan.py         # Care plan generation
-│   ├── schemas/
-│   │   ├── case.py              # Request/response schemas for cases
-│   │   ├── extraction.py        # Extraction result schema
-│   │   ├── review.py            # Review payload schemas
-│   │   └── care_plan.py         # Care plan schemas
-│   └── services/
-│       ├── case_service.py      # Case DB operations
-│       ├── gemini_service.py    # PDF extraction (stub)
-│       ├── agent_service.py     # Validation agent checks
-│       ├── validation_service.py# Scoring and review builder
-│       └── care_plan_service.py # Care plan generation
+│   ├── core/                    # Settings and security helpers
+│   ├── db/                      # SQLAlchemy engine, session, models
+│   ├── routes/                  # FastAPI routers
+│   ├── schemas/                 # Pydantic request/response models
+│   └── services/                # Business logic and AI helpers
 ├── alembic/                     # Database migrations
-│   ├── env.py
-│   └── versions/
-├── uploads/                     # Uploaded PDF files (gitignored)
-├── compose.yaml                 # Docker Compose for Postgres + pgAdmin
-├── requirements.txt             # Python dependencies
-├── alembic.ini                  # Alembic config
-├── .env.example                 # Template for environment variables
-└── .env                         # Local env vars (not committed)
+├── frontend/
+│   ├── carebridge-facility/     # Vite facility dashboard
+│   └── carebridge-patient/      # Patient portal
+├── compose.yaml                 # Full local stack
+├── backend.Dockerfile           # Backend container image
+└── requirements.txt             # Python dependencies
 ```
 
----
+## pgAdmin
 
-## Common issues
+If you use the Docker stack, open `http://localhost:5050` and sign in with the values from your root `.env` file. Add a server using:
 
-**`docker compose up` fails:**
-Make sure Docker Desktop is running. On Windows, restart Docker Desktop if it was just installed.
-
-**`alembic upgrade head` connection refused:**
-PostgreSQL needs a few seconds to start. Wait and try again. Check `docker compose ps` to verify the `carebridge_db` container is up.
-
-**`ModuleNotFoundError: No module named 'app'`:**
-Make sure you are running commands from the `carebridge-ai/` root directory, and your virtual environment is activated.
-
-**Port 5432 already in use:**
-Another PostgreSQL instance is running locally. Either stop it or change `POSTGRES_PORT` in `.env` and update the port in `DATABASE_URL` to match.
-
----
-
-## Stopping the services
-
-```bash
-# Stop containers (keeps data)
-docker compose down
-
-# Stop containers and delete database data
-docker compose down -v
-```
+- Host: `db`
+- Port: `5432`
+- Username: `carebridge_user`
+- Password: `carebridge_pass`
+- Database: `carebridge_db`
