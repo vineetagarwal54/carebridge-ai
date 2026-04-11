@@ -1,76 +1,95 @@
 """
-Internal agent/orchestrator service.
-Runs focused checks on Gemini's extraction output.
-Not a multi-agent system — just one orchestrator calling check functions.
+Agent orchestrator service.
+
+Runs a 5-agent pipeline on Gemini's raw extraction output:
+  1. NormalizationAgent  — field cleanup + context detection
+  2. MedicationSafetyAgent  — structural med checks   } run in parallel
+  3. FollowupAndRiskAgent   — follow-up / risk checks }
+  4. ReviewDecisionAgent — confidence penalties + approval blocking + chat context
+
+Agent 5 (PatientSummaryAgent) is NOT called here — it is invoked by the
+care plan generation route to avoid slowing down extraction.
+
+Function signature is unchanged from the original:
+  async def run_agent_checks(extraction: ExtractionResult) -> ExtractionResult
 """
 
-from app.schemas.extraction import ExtractionResult, MissingInfoItem, RiskItem
+import asyncio
+from app.schemas.extraction import ExtractionResult, MissingInfoItem
+from app.services.agents.normalization_agent import NormalizationAgent
+from app.services.agents.medication_safety_agent import MedicationSafetyAgent
+from app.services.agents.followup_risk_agent import FollowupAndRiskAgent
+from app.services.agents.review_decision_agent import ReviewDecisionAgent
 
 
 async def run_agent_checks(extraction: ExtractionResult) -> ExtractionResult:
     """
-    Orchestrator: runs all internal checks on the raw extraction.
-    Each check can add missing_information items or adjust confidence.
+    Orchestrator: runs all agent checks on the raw extraction.
+
+    Pipeline:
+      1. Normalize fields and detect clinical context flags
+      2. Run medication safety + follow-up/risk checks in parallel
+         (agents return findings only — they do NOT mutate extraction)
+      3. Merge findings into extraction (main thread, sequential)
+      4. Apply confidence caps based on findings (main thread)
+      5. Review decision — penalties + chat context
     """
-    extraction = _check_medications(extraction)
-    extraction = _check_follow_ups(extraction)
-    extraction = _check_allergies(extraction)
-    extraction = _check_risks(extraction)
+
+    # Step 1: normalize (sync, main thread)
+    extraction, ctx = NormalizationAgent().run(extraction)
+
+    # Step 2: run safety checks in parallel — both return list[MissingInfoItem]
+    # Neither agent mutates extraction; they only read it.
+    med_findings, risk_findings = await asyncio.gather(
+        asyncio.to_thread(MedicationSafetyAgent().run, extraction, ctx),
+        asyncio.to_thread(FollowupAndRiskAgent().run, extraction, ctx),
+    )
+
+    # Step 3: merge findings (main thread, both futures resolved)
+    extraction.missing_information.extend(med_findings)
+    extraction.missing_information.extend(risk_findings)
+
+    # Step 4: apply confidence caps based on findings (main thread)
+    _apply_confidence_caps(extraction)
+
+    # Step 5: review decision — penalties + chat context
+    extraction = ReviewDecisionAgent().run(extraction, ctx)
+
     return extraction
 
 
-def _check_medications(ext: ExtractionResult) -> ExtractionResult:
-    """Flag medications missing critical dosing information."""
-    for med in ext.medications:
-        if not med.dose or not med.frequency:
-            ext.missing_information.append(MissingInfoItem(
-                field_name=f"medication:{med.name}",
-                reason=f"Missing {'dose' if not med.dose else 'frequency'} for {med.name}",
-                severity="high",
-            ))
-            # Lower confidence for incomplete meds
+def _apply_confidence_caps(extraction: ExtractionResult) -> None:
+    """
+    Cap confidence on medications and follow-ups based on missing-info findings.
+    Runs in the main thread after both agents have returned — no race conditions.
+    """
+    # Build sets of flagged medication and follow-up names from findings
+    flagged_meds: set[str] = set()
+    flagged_followups: set[str] = set()
+
+    for item in extraction.missing_information:
+        reason_lower = item.reason.lower()
+
+        # Medication flags: "Missing dose for X" / "Missing frequency for X"
+        if item.field_name == "medications" and (
+            "missing dose" in reason_lower or "missing frequency" in reason_lower
+        ):
+            # extract med name from reason text
+            for med in extraction.medications:
+                if med.name.lower() in reason_lower:
+                    flagged_meds.add(med.name.lower())
+
+        # Follow-up flags from field_name pattern "follow_up:ProviderName"
+        if item.field_name.startswith("follow_up:") and item.severity in ("critical", "warning"):
+            provider = item.field_name.split(":", 1)[1].lower()
+            flagged_followups.add(provider)
+
+    # Apply caps
+    for med in extraction.medications:
+        if med.name.lower() in flagged_meds:
             med.confidence = min(med.confidence, 0.50)
-    return ext
 
-
-def _check_follow_ups(ext: ExtractionResult) -> ExtractionResult:
-    """Flag follow-ups without a date or provider."""
-    for fu in ext.follow_ups:
-        if not fu.appointment_date:
-            ext.missing_information.append(MissingInfoItem(
-                field_name=f"follow_up:{fu.provider_name or 'unknown'}",
-                reason=f"No appointment date for {fu.specialty or 'unknown'} follow-up",
-                severity="high",
-            ))
+    for fu in extraction.follow_ups:
+        provider_key = (fu.provider_name or fu.specialty or "unknown provider").lower()
+        if provider_key in flagged_followups:
             fu.confidence = min(fu.confidence, 0.45)
-        if not fu.provider_name:
-            ext.missing_information.append(MissingInfoItem(
-                field_name="follow_up:unknown_provider",
-                reason="Follow-up scheduled but provider name missing",
-                severity="medium",
-            ))
-    return ext
-
-
-def _check_allergies(ext: ExtractionResult) -> ExtractionResult:
-    """Allergies missing without explicit 'none' is a hard block."""
-    if not ext.allergies:
-        ext.missing_information.append(MissingInfoItem(
-            field_name="allergies",
-            reason="No allergies listed and no explicit 'none known' statement",
-            severity="high",
-        ))
-    return ext
-
-
-def _check_risks(ext: ExtractionResult) -> ExtractionResult:
-    """High/critical risks must have an action_needed."""
-    for risk in ext.risks:
-        if risk.severity in ("high", "critical") and not risk.action_needed:
-            ext.missing_information.append(MissingInfoItem(
-                field_name=f"risk:{risk.category}",
-                reason=f"High-severity risk '{risk.category}' has no action plan",
-                severity="high",
-            ))
-            risk.confidence = min(risk.confidence, 0.50)
-    return ext

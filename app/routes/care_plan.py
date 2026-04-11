@@ -6,6 +6,7 @@ from app.schemas.care_plan import CarePlanResponse
 from app.schemas.extraction import ExtractionResult
 from app.services.case_service import get_case, update_case
 from app.services.care_plan_service import generate_care_plan
+from app.services.agents.patient_summary_agent import PatientSummaryAgent
 
 router = APIRouter(prefix="/cases/{case_id}/care-plan", tags=["care_plan"])
 
@@ -24,7 +25,13 @@ async def generate(case_id: int, db: Session = Depends(get_db)):
     extraction = ExtractionResult(**case.extraction_data)
     care_plan = await generate_care_plan(case.id, extraction)
 
-    update_case(db, case, care_plan_data=care_plan.model_dump(mode="json"), status="care_plan_generated")
+    # Generate patient-friendly summary via Gemini (Agent 5)
+    patient_summary = await PatientSummaryAgent().run(extraction, case)
+
+    care_plan_dict = care_plan.model_dump(mode="json")
+    care_plan_dict["patient_summary"] = patient_summary
+
+    update_case(db, case, care_plan_data=care_plan_dict, status="care_plan_generated")
 
     return care_plan
 
