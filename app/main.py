@@ -1,0 +1,16 @@
+from fastapi import FastAPI
+from app.routes import cases, documents, extraction, review, care_plan
+
+app = FastAPI(title="CareBridge API", version="0.1.0")
+
+# Each router handles a slice of the API surface
+app.include_router(cases.router)
+app.include_router(documents.router)
+app.include_router(extraction.router)
+app.include_router(review.router)
+app.include_router(care_plan.router)
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
