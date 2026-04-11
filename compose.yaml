@@ -11,6 +11,8 @@ services:
       - "${POSTGRES_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - carebridge_network
 
   pgadmin:
     image: dpage/pgadmin4:latest
@@ -23,6 +25,44 @@ services:
       - "5050:80"
     depends_on:
       - db
+    networks:
+      - carebridge_network
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    container_name: carebridge_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      SECRET_KEY: ${SECRET_KEY}
+    depends_on:
+      - db
+    volumes:
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+    networks:
+      - carebridge_network
+
+  frontend:
+    build:
+      context: ./carebridge-frontend
+      dockerfile: Dockerfile
+    container_name: carebridge_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - carebridge_network
 
 volumes:
   postgres_data:
+
+networks:
+  carebridge_network:
+    driver: bridge
