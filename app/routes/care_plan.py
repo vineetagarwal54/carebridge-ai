@@ -1,0 +1,47 @@
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from app.db.database import get_db
+from app.schemas.care_plan import CarePlanResponse
+from app.schemas.extraction import ExtractionResult
+from app.services.case_service import get_case, update_case
+from app.services.care_plan_service import generate_care_plan
+from app.services.agents.patient_summary_agent import PatientSummaryAgent
+
+router = APIRouter(prefix="/cases/{case_id}/care-plan", tags=["care_plan"])
+
+
+@router.post("/generate", response_model=CarePlanResponse)
+async def generate(case_id: int, db: Session = Depends(get_db)):
+    """Generate a patient-friendly care plan from approved extraction."""
+    case = get_case(db, case_id)
+
+    if case.status != "approved":
+        raise HTTPException(status_code=400, detail="Case must be approved before generating care plan")
+
+    if not case.extraction_data:
+        raise HTTPException(status_code=400, detail="No extraction data found")
+
+    extraction = ExtractionResult(**case.extraction_data)
+    care_plan = await generate_care_plan(case.id, extraction)
+
+    # Generate patient-friendly summary via Gemini (Agent 5)
+    patient_summary = await PatientSummaryAgent().run(extraction, case)
+
+    care_plan_dict = care_plan.model_dump(mode="json")
+    care_plan_dict["patient_summary"] = patient_summary
+
+    update_case(db, case, care_plan_data=care_plan_dict, status="care_plan_generated")
+
+    return care_plan
+
+
+@router.get("", response_model=CarePlanResponse)
+def get_care_plan(case_id: int, db: Session = Depends(get_db)):
+    """Retrieve the generated care plan."""
+    case = get_case(db, case_id)
+
+    if not case.care_plan_data:
+        raise HTTPException(status_code=404, detail="Care plan not yet generated")
+
+    return CarePlanResponse(**case.care_plan_data)
