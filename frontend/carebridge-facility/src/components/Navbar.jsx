@@ -1,8 +1,18 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import logo from "../assets/icon.png";
+import { clearAuth, getUser } from "../utils/authStorage";
 
 export default function Navbar() {
     const location = useLocation();
+    const navigate = useNavigate();
+    const user = getUser();
+    const displayName = user?.full_name || user?.name || "Staff";
+    const initials = displayName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+
+    const handleSignOut = () => {
+        clearAuth();
+        navigate("/");
+    };
 
     const tabs = [
         { label: "Patients", path: "/facility/patients" },
@@ -104,6 +114,37 @@ export default function Navbar() {
                 <Link to="/facility/new-plan">
                     <button className="primary-btn">Upload PDF</button>
                 </Link>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div
+                        style={{
+                            width: "32px",
+                            height: "32px",
+                            borderRadius: "50%",
+                            background: "var(--primary-light)",
+                            color: "var(--primary)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontWeight: 600,
+                            fontSize: "12px",
+                            flexShrink: 0,
+                        }}
+                    >
+                        {initials}
+                    </div>
+                    <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-primary)" }}>
+                        {displayName}
+                    </span>
+                </div>
+
+                <button
+                    onClick={handleSignOut}
+                    className="outline-btn"
+                    style={{ fontSize: "13px", padding: "8px 14px" }}
+                >
+                    Sign out
+                </button>
             </div>
         </div>
     );

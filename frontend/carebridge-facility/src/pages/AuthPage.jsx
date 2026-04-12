@@ -62,7 +62,7 @@ export default function AuthPage() {
       if (data.user.role === "facility") {
         navigate("/facility/patients");
       } else {
-        navigate("/");
+        navigate("/patient/home");
       }
     } catch (error) {
       setErrorText(

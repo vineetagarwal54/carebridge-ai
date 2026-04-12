@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import LandingPage from "./pages/LandingPage";
 import AuthPage from "./pages/AuthPage";
+import PatientHome from "./pages/PatientHome";
 import FacilityPatients from "./pages/FacilityPatients";
 import NewCarePlan from "./pages/NewCarePlan";
 import FacilityDashboard from "./pages/FacilityDashboard";
@@ -14,6 +15,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/patient/home" element={<PatientHome />} />
 
         <Route
           path="/facility/patients"
