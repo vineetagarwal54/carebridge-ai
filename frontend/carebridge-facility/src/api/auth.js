@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE_URL = backend-production-5bdbb.up.railway.app;
+const API_BASE_URL = frontend-production-6953.up.railway.app;
 
 export const authClient = axios.create({
   baseURL: API_BASE_URL,
