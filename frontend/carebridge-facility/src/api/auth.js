@@ -1,6 +1,7 @@
 import axios from "axios";
 
-const API_BASE_URL = frontend-production-6953.up.railway.app;
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL || "https://your-backend-service-url.up.railway.app";
 
 export const authClient = axios.create({
   baseURL: API_BASE_URL,
