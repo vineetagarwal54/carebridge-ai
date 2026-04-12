@@ -14,11 +14,26 @@ from app.schemas.review import (
 THRESHOLD_AUTO = 0.85
 THRESHOLD_REVIEW = 0.60
 
+# Penalty weights applied per missing-info item (mirrors ReviewDecisionAgent constants)
+_PENALTY_CRITICAL = 0.15
+_PENALTY_WARNING = 0.08
+
 
 def validate_and_score(extraction: ExtractionResult) -> ExtractionResult:
-    """Normalize fields and recompute overall confidence."""
+    """Normalize fields, compute base confidence, then apply severity penalties."""
     extraction = _normalize(extraction)
-    extraction.overall_confidence = _compute_confidence(extraction)
+    base = _compute_confidence(extraction)
+    # Apply per-item penalties now that we have the real base score.
+    # ReviewDecisionAgent already built missing_information; it could not apply
+    # penalties earlier because overall_confidence was still 0.0 at that point.
+    for item in extraction.missing_information:
+        if item.field_name == "_chat_context":
+            continue
+        if item.severity == "critical":
+            base -= _PENALTY_CRITICAL
+        elif item.severity in ("warning", "high"):
+            base -= _PENALTY_WARNING
+    extraction.overall_confidence = round(max(0.0, min(1.0, base)), 3)
     return extraction
 
 
@@ -36,7 +51,7 @@ def build_review_payload(extraction: ExtractionResult) -> NurseReviewPayload:
 
     # Hard blocks become unresolved issues
     for item in extraction.missing_information:
-        if item.severity == "high":
+        if item.severity in ("high", "critical"):
             issues.append(UnresolvedIssue(
                 field_name=item.field_name,
                 issue=item.reason,

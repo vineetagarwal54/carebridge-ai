@@ -27,6 +27,7 @@ class PatientCaseResponse(BaseModel):
     source_hospital: str | None = None
     discharge_date: date | None = None
     status: CaseStatus = CaseStatus.intake
+    extraction_data: dict | None = None
     created_at: datetime
     updated_at: datetime
 

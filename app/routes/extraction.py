@@ -29,7 +29,10 @@ async def extract_case(case_id: int, db: Session = Depends(get_db)):
     file_path = case.documents[0].file_path
 
     # Step 1: Gemini extraction
-    raw_extraction = await extract_from_pdf(case.id, file_path)
+    try:
+        raw_extraction = await extract_from_pdf(case.id, file_path)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     # Step 2: Agent/orchestrator checks
     reviewed_extraction = await run_agent_checks(raw_extraction)

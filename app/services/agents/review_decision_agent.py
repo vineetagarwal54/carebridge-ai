@@ -32,7 +32,8 @@ class ReviewDecisionAgent:
         extraction: ExtractionResult,
         ctx: NormalizationContext,
     ) -> ExtractionResult:
-        self._apply_confidence_penalties(extraction)
+        # Note: confidence penalties are applied by validation_service.validate_and_score,
+        # which runs after this agent and has the actual computed base confidence.
         self._build_chat_context(extraction, ctx)
         return extraction
 
