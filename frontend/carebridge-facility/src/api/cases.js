@@ -37,3 +37,28 @@ export async function extractCase(caseId) {
   const response = await apiClient.post(`/cases/${caseId}/extract`);
   return response.data;
 }
+
+export async function reviewCase(caseId) {
+  const response = await apiClient.get(`/cases/${caseId}/review`);
+  return response.data;
+}
+
+export async function patchReview(caseId, payload) {
+  const response = await apiClient.patch(`/cases/${caseId}/review`, payload);
+  return response.data;
+}
+
+export async function approveCase(caseId) {
+  const response = await apiClient.post(`/cases/${caseId}/approve`);
+  return response.data;
+}
+
+export async function generateCarePlan(caseId) {
+  const response = await apiClient.post(`/cases/${caseId}/care-plan/generate`);
+  return response.data;
+}
+
+export async function fetchCarePlan(caseId) {
+  const response = await apiClient.get(`/cases/${caseId}/care-plan`);
+  return response.data;
+}

@@ -70,14 +70,15 @@ def approve_case(case_id: int, db: Session = Depends(get_db)):
     """Nurse approves the review — case moves to approved status."""
     case = get_case(db, case_id)
 
+    # Ensure review data exists — generate it now if missing
     if not case.review_data:
-        raise HTTPException(status_code=400, detail="Review not yet generated")
-
-    if not case.review_data.get("ready_for_approval"):
-        raise HTTPException(
-            status_code=400,
-            detail="Case has unresolved issues and cannot be approved",
-        )
+        from app.schemas.extraction import ExtractionResult
+        from app.services.validation_service import build_review_payload
+        if not case.extraction_data:
+            raise HTTPException(status_code=400, detail="Extraction not yet run")
+        extraction = ExtractionResult(**case.extraction_data)
+        payload = build_review_payload(extraction)
+        update_case(db, case, review_data=payload.model_dump(mode="json"), status="in_review")
 
     update_case(db, case, status="approved")
 
