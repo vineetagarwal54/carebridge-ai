@@ -14,6 +14,7 @@ class CaseStatus(str, Enum):
 # What the nurse sends to create a case
 class PatientCaseCreate(BaseModel):
     patient_name: str
+    patient_email: str | None = None
     age: int
     source_hospital: str
     discharge_date: date
@@ -23,6 +24,7 @@ class PatientCaseCreate(BaseModel):
 class PatientCaseResponse(BaseModel):
     id: int
     patient_name: str
+    patient_email: str | None = None
     age: int | None = None
     source_hospital: str | None = None
     discharge_date: date | None = None
@@ -38,6 +40,7 @@ class PatientCaseResponse(BaseModel):
 class PatientCaseSummary(BaseModel):
     id: int
     patient_name: str
+    patient_email: str | None = None
     status: CaseStatus
     risk_score: float | None = None
     missing_items_count: int = 0

@@ -16,9 +16,11 @@ def create_case(
     age: int,
     source_hospital: str,
     discharge_date: date,
+    patient_email: str | None = None,
 ) -> PatientCase:
     case = PatientCase(
         patient_name=patient_name,
+        patient_email=patient_email,
         age=age,
         source_hospital=source_hospital,
         discharge_date=discharge_date,

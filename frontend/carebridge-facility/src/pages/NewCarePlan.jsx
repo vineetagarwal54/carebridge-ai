@@ -7,6 +7,7 @@ export default function NewCarePlan() {
     const navigate = useNavigate();
 
     const [patientName, setPatientName] = useState("");
+    const [patientEmail, setPatientEmail] = useState("");
     const [age, setAge] = useState("");
     const [sourceHospital, setSourceHospital] = useState("");
     const [dischargeDate, setDischargeDate] = useState("");
@@ -36,6 +37,7 @@ export default function NewCarePlan() {
             setStep("creating");
             const newCase = await createCase({
                 patient_name: patientName.trim(),
+                patient_email: patientEmail.trim() || null,
                 age: Number(age),
                 source_hospital: sourceHospital.trim(),
                 discharge_date: dischargeDate,
@@ -115,6 +117,20 @@ export default function NewCarePlan() {
                                 disabled={loading}
                             />
                         </div>
+                    </div>
+
+                    <div style={{ marginBottom: "12px" }}>
+                        <label style={labelStyle}>
+                            Patient email <span style={{ fontWeight: 400, color: "var(--text-muted)" }}>(optional — lets the patient log in and view their plan)</span>
+                        </label>
+                        <input
+                            type="email"
+                            value={patientEmail}
+                            onChange={(e) => setPatientEmail(e.target.value)}
+                            placeholder="patient@example.com"
+                            style={inputStyle}
+                            disabled={loading}
+                        />
                     </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "12px" }}>

@@ -11,6 +11,7 @@ class PatientCase(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     patient_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    patient_email: Mapped[str | None] = mapped_column(String(254), nullable=True, index=True)
     age: Mapped[int | None] = mapped_column(Integer, nullable=True)
     source_hospital: Mapped[str | None] = mapped_column(String(200), nullable=True)
     discharge_date: Mapped[date | None] = mapped_column(Date, nullable=True)

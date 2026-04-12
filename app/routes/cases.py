@@ -16,6 +16,7 @@ def create(body: PatientCaseCreate, db: Session = Depends(get_db)):
     case = create_case(
         db,
         patient_name=body.patient_name,
+        patient_email=body.patient_email,
         age=body.age,
         source_hospital=body.source_hospital,
         discharge_date=body.discharge_date,
@@ -33,6 +34,7 @@ def list_cases(db: Session = Depends(get_db)):
         summaries.append(PatientCaseSummary(
             id=case.id,
             patient_name=case.patient_name,
+            patient_email=case.patient_email,
             status=case.status,
             risk_score=extraction.get("overall_confidence"),
             missing_items_count=len(extraction.get("missing_information", [])),
